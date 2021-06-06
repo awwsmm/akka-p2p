@@ -1,0 +1,7 @@
+.bsp
+.idea
+logs
+project
+target
+.DS_Store
+.vscode
