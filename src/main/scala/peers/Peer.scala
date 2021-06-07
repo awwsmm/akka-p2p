@@ -17,6 +17,8 @@ import akka.stream.{OverflowStrategy, SubscriptionWithCancelException}
 import com.typesafe.scalalogging.StrictLogging
 import org.scalactic.TypeCheckedTripleEquals._
 
+// TODO remove as many Awaits as possible
+
 object Peer extends StrictLogging {
 
   private val ClosingConnection = "[[[goodbye"

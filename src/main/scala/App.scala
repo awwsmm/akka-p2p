@@ -1,18 +1,18 @@
 package org.akkap2p
 
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.io.StdIn
 import scala.util.{Failure, Success, Try}
 
 import akka.actor.typed._
 import akka.actor.typed.scaladsl.AskPattern.Askable
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Directives
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
-import peers.{Address, Peer, User}
+import peers.{Address, User}
 import pureconfig._
 import pureconfig.generic.auto._
 import upickle.default._
@@ -110,14 +110,17 @@ object App extends App with Directives with StrictLogging with JSONSupport {
         logger.info(s"Received connection request from $address")
 
         extractWebSocketUpgrade { upgrade =>
-          val (actorRef, source) = Peer.refAndSource()
-
           logger.debug(s"Attempting to accept incoming connection from $address")
 
           implicit val askTimeout: Timeout = 3.seconds
-          val ref = Await.result(system.ref ? (User.AcceptConnection(_, address, x => logger.info(x), actorRef)), 5.seconds)
 
-          complete(upgrade.handleMessagesWithSinkSource(Peer.sink(ref), source))
+          val futureResponse: Future[HttpResponse] =
+            system.ref ? { User.AcceptConnection(_, upgrade, address, x => logger.info(x)) }
+
+          onComplete(futureResponse) {
+            case Failure(exception) => complete(exception)
+            case Success(response) => complete(response)
+          }
         }
       }
     }

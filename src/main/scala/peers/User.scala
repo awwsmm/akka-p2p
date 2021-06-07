@@ -1,12 +1,15 @@
 package org.akkap2p
 package peers
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior, Scheduler}
+import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws._
+import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
 
 
@@ -14,7 +17,7 @@ object User extends StrictLogging {
 
   sealed trait Command
 
-  final case class AcceptConnection(sender: ActorRef[ActorRef[Peer.Command]], address: Address, onReceive: String => Unit, peer: ActorRef[TextMessage.Strict]) extends Command
+  final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: String => Unit) extends Command
   final case class RequestConnection(address: Address, onReceive: String => Unit, timeout: Duration) extends Command
 
   final case class Broadcast(message: String) extends Command
@@ -33,21 +36,20 @@ object User extends StrictLogging {
       Behaviors.receive { (context, command) =>
 
         implicit val system: ActorSystem[Nothing] = context.system
+        implicit val scheduler: Scheduler = system.scheduler
+        implicit val ec: ExecutionContextExecutor = system.executionContext
 
         command match {
-          case AcceptConnection(sender, address, onReceive, peer) =>
-            Try {
-              context.spawn(Peer.connected(context.self, address, onReceive, peer), address.urlEncoded)
-            } match {
-              case Failure(exception) =>
-                logger.error(s"Cannot accept connection from $address because", exception)
-                Behaviors.same
+          case AcceptConnection(sender, upgrade, address, onReceive) =>
+            val (actorRef, source) = Peer.refAndSource()
 
-              case Success(peer) =>
-                logger.info(s"Successfully connected to $address")
-                sender ! peer
-                withPeers(connected + (address -> peer), disconnected)
-            }
+            implicit val askTimeout: Timeout = 3.seconds
+
+            val peer = context.spawn(Peer.connected(context.self, address, onReceive, actorRef), address.urlEncoded)
+            val response = upgrade.handleMessagesWithSinkSource(Peer.sink(peer), source)
+
+            sender ! response
+            withPeers(connected + (address -> peer), disconnected)
 
           case RequestConnection(address, onReceive, timeout) =>
             disconnected.get(address) match {
