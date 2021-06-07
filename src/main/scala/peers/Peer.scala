@@ -78,7 +78,7 @@ object Peer extends StrictLogging {
 
       command match {
         case Connect(uri, timeout, onReceive) =>
-          logger.debug(s"Disconnected Peer at $address received Command to Connect")
+          logger.debug(s"Disconnected Peer at $address received Command to ConnectionEndpoint")
 
           val (actorRef, source) = refAndSource()
           val webSocket = Http().webSocketClientFlow(WebSocketRequest(Uri(uri(address))))
@@ -104,7 +104,7 @@ object Peer extends StrictLogging {
             }
           } match {
             case Failure(exception) =>
-              logger.error(s"Encountered Exception when attempting to connect to $address", exception)
+              logger.error(s"Encountered Exception when attempting to internalConnect to $address", exception)
               Behaviors.same
 
             case Success(behavior) => behavior
@@ -112,6 +112,10 @@ object Peer extends StrictLogging {
 
         case StreamHasFailed(SubscriptionWithCancelException.StageWasCompleted) =>
           logger.debug("Connection closed by peer")
+          Behaviors.same
+
+        case StreamHasCompleted =>
+          logger.debug("Connection confirmed closed")
           Behaviors.same
 
         case other =>
@@ -137,7 +141,7 @@ object Peer extends StrictLogging {
         disconnected(user, address)
 
       case StreamHasCompleted =>
-        logger.debug("Connection confirmed closed -- becoming disconnected")
+        logger.debug("Connection confirmed closed")
         Behaviors.same
 
       case other =>
@@ -166,7 +170,7 @@ object Peer extends StrictLogging {
         Behaviors.same
 
       case _: Connect =>
-        logger.warn(s"Cannot connect to already-connected peer at $address")
+        logger.warn(s"Cannot internalConnect to already-connected peer at $address")
         Behaviors.same
 
       case Disconnect =>

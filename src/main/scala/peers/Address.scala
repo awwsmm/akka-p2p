@@ -13,3 +13,5 @@ final case class Address(host: String, port: Int) {
   override def toString: String = s"$host:$port"
   def urlEncoded: String = URLEncoder.encode(toString, "UTF-8")
 }
+
+final case class AddressedMessage(address: Address, message: String)

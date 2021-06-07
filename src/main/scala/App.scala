@@ -12,7 +12,7 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Directives
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
-import peers.{Address, User}
+import peers.{Address, AddressedMessage, User}
 import pureconfig._
 import pureconfig.generic.auto._
 import upickle.default._
@@ -34,81 +34,28 @@ object App extends App with Directives with StrictLogging with JSONSupport {
         throw new IllegalArgumentException(msg)
     }
 
-  // TODO pull this and timeouts into config
+  val ConnectionEndpoint = "connect"
 
-  val connectionEndpoint = "connect"
-
-  implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior(config.httpPort, connectionEndpoint), "app")
+  implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior(config.httpPort, ConnectionEndpoint), "app")
   implicit val executor: ExecutionContextExecutor = system.executionContext
   implicit val scheduler: Scheduler = system.scheduler
 
-  /**
-   * Provides a way to send an external PUT request to this peer to connect to
-   * ("/peer/connect") or disconnect from ("/peer/disconnect") another peer.
-   *
-   * Requests must provide a JSON body of the form
-   * {{{
-   *   {
-   *     "host": "<hostname_to_connect_to_as_string>",
-   *     "port": <port_to_connect_to_as_number>
-   *   }
-   * }}}
-   */
-  val peer = pathPrefix("peer") {
+  // TODO clean up all these .seconds and askTimeout timeouts -- into config
+
+  val connect = path(ConnectionEndpoint) {
     put {
       entity(as[Address]) { address =>
-        path("connect") {
-          logger.info(s"Received external request to connect to $address")
-
-          // TODO clean up all these .seconds and askTimeout timeouts
-
-          system.ref ! User.RequestConnection(address, x => logger.info(x), 10.seconds)
-          complete(StatusCodes.OK)
-        } ~
-          path("disconnect") {
-            logger.info(s"Received external request to disconnect from $address")
-            system.ref ! User.Disconnect(address)
-            complete(StatusCodes.OK)
-          }
+        logger.info(s"Received external request to connect to $address")
+        system.ref ! User.RequestConnection(address, x => logger.info(x), 10.seconds)
+        complete(StatusCodes.OK)
       }
-    }
-  }
-
-  /**
-   * GET request endpoint which returns a JSON response with the addresses
-   * of all connected and disconnected peers.
-   */
-  val peers = path("peers") {
-    get {
-      logger.info(s"Received external query for peers")
-
-      implicit val askTimeout: Timeout = 3.seconds
-
-      onComplete(system.ref ? User.GetPeers) {
-        case Failure(exception) =>
-          complete(exception)
-
-        case Success(peerGroups) =>
-          val map = peerGroups.map(group => group.name -> group.addresses.map(_.toString))
-          val json = write(map.toMap)
-          complete(json)
-      }
-    }
-  }
-
-  /**
-   * The internal peer-to-peer connection request endpoint.
-   *
-   * Requests must contain the `upgrade-to-websocket` attribute and a "port"
-   * parameter or they will be rejected.
-   */
-  val connect = path(connectionEndpoint) {
+    } ~
     extractHost { host =>
       parameters("port") { portStr =>
-        val port = portStr.toInt
-        val address = Address(host, port)
 
-        logger.info(s"Received connection request from $address")
+        // only used internally, so we trust `portStr` to be an Int
+        val address = Address(host, portStr.toInt)
+        logger.info(s"Received p2p connection request from $address")
 
         extractWebSocketUpgrade { upgrade =>
           logger.debug(s"Attempting to accept incoming connection from $address")
@@ -127,42 +74,61 @@ object App extends App with Directives with StrictLogging with JSONSupport {
     }
   }
 
+  val disconnect = path("disconnect") {
+    put {
+      entity(as[Address]) { address =>
+        logger.info(s"Received external request to disconnect from $address")
+        system.ref ! User.Disconnect(address)
+        complete(StatusCodes.OK)
+      }
+    } ~
+    put {
+      logger.info("Received external request to disconnect from all connected peers")
+      system.ref ! User.DisconnectAll
+      complete(StatusCodes.OK)
+    }
+  }
+
   /**
-   * Send a message to all connected peers.
-   *
-   * The body of the POST request will be sent via WebSocket connection to all
-   * connected peers.
+   * GET request endpoint which returns a JSON response with the addresses
+   * of all connected and disconnected peers.
    */
-  val broadcast = path("broadcast") {
+  val peers = path("peers") {
+    get {
+      logger.info(s"Received external query for peers")
+
+      implicit val askTimeout: Timeout = 3.seconds
+
+      onComplete(system.ref ? User.GetPeers) {
+        case Failure(exception) =>
+          complete(exception)
+
+        case Success(groups) =>
+          val map = groups.map(g => g.name -> g.addresses.map(_.toString))
+          complete(write(map.toMap))
+      }
+    }
+  }
+
+  val send = path("send") {
     post {
+      entity(as[AddressedMessage]) { case AddressedMessage(address, body) =>
+        logger.info(s"Received external request to send message to $address")
+        system.ref ! User.TellPeer(address, body)
+        complete(StatusCodes.OK)
+      } ~
       entity(as[String]) { body =>
-        logger.info(s"""Broadcasting message "$body" to all connected peers""")
+        logger.info("Received external request to send message to all connected peers")
         system.ref ! User.Broadcast(body)
         complete(StatusCodes.OK)
       }
     }
   }
 
-  // TODO endpoint to send a message to only a single peer?
-
-  /**
-   * Disconnect from all connected peers.
-   */
-  val disconnectAll = path("disconnectAll") {
-
-    // TODO somehow combine with "/peer/disconnect" ? (When no body is given?)
-
-    put {
-      logger.info(s"""Disconnecting from all connected peers""")
-      system.ref ! User.DisconnectAll
-      complete(StatusCodes.OK)
-    }
-  }
-
   val bindingFuture = Http()
     .newServerAt(config.httpHost, config.httpPort)
     .adaptSettings(_.mapWebsocketSettings(_.withPeriodicKeepAliveMaxIdle(30.seconds)))
-    .bind(peer ~ connect ~ broadcast ~ disconnectAll ~ peers)
+    .bind(connect ~ disconnect ~ peers ~ send)
 
   logger.info(s"Listening on ${config.httpHost}:${config.httpPort}")
 
@@ -175,7 +141,7 @@ object App extends App with Directives with StrictLogging with JSONSupport {
 
         case Success(value) =>
           val address = Address(host, value)
-          logger.info(s"Attempting to connect to preconfigured peer at $address")
+          logger.info(s"Attempting to internalConnect to preconfigured peer at $address")
           system.ref ! User.RequestConnection(address, x => logger.info(x), 10.seconds)
           complete(StatusCodes.OK)
       }
@@ -187,13 +153,14 @@ object App extends App with Directives with StrictLogging with JSONSupport {
 
   StdIn.readLine() // let it run until user presses return
 
-  bindingFuture
-    .flatMap(fff => fff.unbind()) // trigger unbinding from the port
-    .onComplete { _ =>
+  bindingFuture.flatMap { binding =>
+    logger.info("Shutting down...")
 
-      // TODO cleanly shut down here by informing all peers that we're going offline
+    // TODO fix this so it shuts down cleanly
+    system.ref ! User.DisconnectAll
+    binding.unbind()
 
-      logger.info("App terminated by user")
+  }.onComplete { _ =>
       system.terminate()
     }
 

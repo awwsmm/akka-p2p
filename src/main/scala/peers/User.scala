@@ -20,6 +20,7 @@ object User extends StrictLogging {
   final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: String => Unit) extends Command
   final case class RequestConnection(address: Address, onReceive: String => Unit, timeout: Duration) extends Command
 
+  final case class TellPeer(address: Address, message: String) extends Command
   final case class Broadcast(message: String) extends Command
 
   final case class Disconnect(address: Address) extends Command
@@ -60,7 +61,7 @@ object User extends StrictLogging {
 
               case None =>
                 if (connected.contains(address)) {
-                  logger.warn(s"Cannot connect to already-connected peer at $address")
+                  logger.warn(s"Cannot internalConnect to already-connected peer at $address")
                   Behaviors.same
 
                 } else {
@@ -81,6 +82,22 @@ object User extends StrictLogging {
           case Broadcast(message) =>
             connected.values.foreach(_ ! Peer.Outgoing(message))
             Behaviors.same
+
+          case TellPeer(address, message) =>
+            connected.get(address) match {
+              case Some(peer) =>
+                peer ! Peer.Outgoing(message)
+                Behaviors.same
+
+              case None =>
+                if (disconnected.contains(address)) {
+                  logger.info(s"Cannot send message to currently-disconnected peer at $address")
+                  Behaviors.same
+                } else {
+                  logger.info(s"Cannot send message to unknown peer at $address")
+                  Behaviors.same
+                }
+            }
 
           case DisconnectAll =>
             connected.values.foreach(_ ! Peer.Disconnect)
