@@ -17,8 +17,6 @@ import akka.stream.{OverflowStrategy, SubscriptionWithCancelException}
 import com.typesafe.scalalogging.StrictLogging
 import org.scalactic.TypeCheckedTripleEquals._
 
-// TODO remove as many Awaits as possible
-
 object Peer extends StrictLogging {
 
   private val ClosingConnection = "[[[goodbye"
@@ -85,6 +83,14 @@ object Peer extends StrictLogging {
           val (actorRef, source) = refAndSource()
           val webSocket = Http().webSocketClientFlow(WebSocketRequest(Uri(uri(address))))
           val upgradeResponse = source.viaMat(webSocket)(Keep.right).toMat(sink(context.self))(Keep.left).run()
+
+          /*
+          We block here because we cannot return a Future[Behavior].
+
+          If we need more throughput for this actor, we can onComplete the
+          Future[Behavior] to send a message to this actor with a new Behavior,
+          which it could then become, but that seems like overkill here.
+           */
 
           Try {
             Await.result(upgradeResponse, timeout) match {

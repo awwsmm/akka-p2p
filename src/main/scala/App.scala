@@ -1,7 +1,7 @@
 package org.akkap2p
 
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.io.StdIn
 import scala.util.{Failure, Success, Try}
 
@@ -83,12 +83,16 @@ object App extends App with Directives with StrictLogging with JSONSupport {
       logger.info(s"Received external query for peers")
 
       implicit val askTimeout: Timeout = 3.seconds
-      val peerGroups = Await.result(system.ref ? User.GetPeers, 5.seconds)
 
-      val map = peerGroups.map(group => group.name -> group.addresses.map(_.toString))
-      val json = write(map.toMap)
+      onComplete(system.ref ? User.GetPeers) {
+        case Failure(exception) =>
+          complete(exception)
 
-      complete(json)
+        case Success(peerGroups) =>
+          val map = peerGroups.map(group => group.name -> group.addresses.map(_.toString))
+          val json = write(map.toMap)
+          complete(json)
+      }
     }
   }
 
@@ -99,9 +103,6 @@ object App extends App with Directives with StrictLogging with JSONSupport {
    * parameter or they will be rejected.
    */
   val connect = path(connectionEndpoint) {
-
-    // TODO check that PUT / POST / GET are used appropriately
-
     extractHost { host =>
       parameters("port") { portStr =>
         val port = portStr.toInt
