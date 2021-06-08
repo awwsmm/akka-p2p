@@ -114,7 +114,7 @@ object App extends App with Directives with StrictLogging with JSONSupport {
     post {
       entity(as[AddressedMessage]) { case AddressedMessage(address, body) =>
         logger.info(s"Received external request to send message to $address")
-        system.ref ! User.TellPeer(address, body)
+        system.ref ! User.Send(address, body)
         complete(StatusCodes.OK)
       } ~
       entity(as[String]) { body =>
