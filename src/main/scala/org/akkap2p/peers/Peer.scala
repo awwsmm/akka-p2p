@@ -35,12 +35,69 @@ object Peer extends StrictLogging {
   case object StreamHasCompleted extends Command
   final case class StreamHasFailed(throwable: Throwable) extends Command
 
-  // TODO document
-  private[Peer] def refSourceAndSink(peer: ActorRef[Command])(implicit system: ActorSystem[_]): (ActorRef[TMS], Source[TMS, NotUsed], Sink[Message, NotUsed]) = {
+  /**
+   * Given a [[Peer]] [[ActorRef]], this method returns everything needed to request a WebSocket connection to (or accept a
+   * WebSocket connection from) that peer.
+   *
+   * This method returns the following values in a 3-tuple:
+   * <ol>
+   *   <li>An ActorRef[TextMessage.Strict] ("`actorRef`")</li>
+   *   <li>A `Source[TextMessage.Strict, NotUsed]` ("`source`")</li>
+   *   <li>A `Sink[Message, NotUsed]` ("`sink`")</li>
+   * </ol>
+   *
+   * [[TMS]] messages received by the [[Sink]] will be re-wrapped as [[Peer.Incoming]] messages and
+   * forwarded to the given `peer` `ActorRef`&#91;[[Peer.Command]]&#93; for processing. All other [[Message]]s are
+   * ignored. The `peer` and `sink` are used in conjunction in this way to listen for and handle messages arriving from
+   * the peer.
+   *
+   * Similarly, when sending messages to the peer, the `actorRef` will send `Message`s to the [[Source]], which will
+   * forward those messages through the WebSocket connection to the peer. To send a message to a given peer, then, you
+   * must send a [[Peer.Outgoing]] message to the `peer` `ActorRef`.
+   *
+   * The resulting flow can be visualized as:
+   * {{{
+   * (Letting)
+   *
+   *   M   == Message
+   *   TMS == TextMessage.Strict
+   *   I   == Peer.Incoming
+   *   O   == Peer.Outgoing
+   *
+   *     +-------------------------------------------------------------+
+   *     | Receiving messages from peer                                |
+   *     |                                                             |
+   * P   |  +---------+                         +-------------------+  |  U
+   * E   |  | "sink"  |     (M), filtered to    |      "peer"       |  |  S
+   * E  ~~> | Sink[M] | ~> (TMS), wrapped as ~> | ActorRef[Command] | ~~> E
+   * R   |  |         |          (I)            |  (context.self)   |  |  R
+   *     |  +---------+                         +-------------------+  |
+   *     +-------------------------------------------------------------+
+   *
+   *     +-----------------------------------------------------------------+
+   *     | Sending messages to peer                                        |
+   *     |                                                                 |
+   * P   |  +-------------+   +----------------+             +--------+    |   U
+   * E   |  |   "source"  |   |   "actorRef"   |             |        |    |   S
+   * E  <~~ | Source[TMS] |~<~|  ActorRef[TMS] | <~ (TMS) <~ | "peer" | <~(O)~ E
+   * R   |  |             |   | (context.self) |             |        |    |   R
+   *     |  +-------------+   +----------------+             +--------+    |
+   *     +-----------------------------------------------------------------+
+   * }}}
+   *
+   * In other words, once the connection is configured correctly, the user should only need to interact with the
+   * "`peer`" `ActorRef` in order to interact with the peer -- handling `Peer.Incoming` messages _from_ the peer and
+   * sending `Peer.Outgoing` messages _to_ the peer.
+   *
+   * @param peer the `ActorRef[Peer.Command]` used for communicating with the peer
+   * @param materializer used to create the `actorRef` and `source` from an [[ActorSource.actorRef]]
+   * @return components required for requesting a WebSocket connection to (or accepting a WebSocket connection from) a peer
+   */
+  private[Peer] def refSourceAndSink(peer: ActorRef[Command])(implicit materializer: ActorSystem[_]): (ActorRef[TMS], Source[TMS, NotUsed], Sink[Message, NotUsed]) = {
 
     val completeOn = Map(TMS(ClosingConnectionAck) -> ())
     val actorSource = ActorSource.actorRef[TMS](completeOn, Map.empty, 10, OverflowStrategy.dropBuffer)
-    val (ref, source) = actorSource.preMaterialize()
+    val (actorRef, source) = actorSource.preMaterialize()
 
     val actorSink = ActorSink.actorRef[Command](peer, StreamHasCompleted, StreamHasFailed)
 
@@ -50,17 +107,21 @@ object Peer extends StrictLogging {
       case _ => None
     }.collect({ case Some(string) => Incoming(string) }).toMat(actorSink)(Keep.none)
 
-    (ref, source, sink)
+    (actorRef, source, sink)
   }
 
   /**
-   * `Behavior` of a `Peer` which is currently disconnected.
+   * The [[Behavior]] of a disconnected [[Peer]].
+   *
+   * All `Peer`s start with this `disconnected` behavior. A `Peer` may become
+   * [[connected]] after it receives and handles a [[RequestConnection]] or
+   * [[AcceptConnection]] message.
    *
    * A `disconnected` `Peer` ignores all `Command`s except `RequestConnection`
    * and `AcceptConnection`.
    *
-   * @param user the `User` actor which spawned this `Peer` actor
-   * @param address the `Address` of this `Peer`
+   * @param user the [[User]] actor which spawned this `Peer` actor
+   * @param address the [[Address]] (hostname and port) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnected`
    */
   def disconnected(user: ActorRef[User.Command], address: Address): Behavior[Command] =
@@ -77,13 +138,15 @@ object Peer extends StrictLogging {
           val upgradeResponse = source.viaMat(webSocket)(Keep.right).toMat(sink)(Keep.left).run()
 
           /*
+          TODO: possibly clean this up
+
           We block here because we cannot return a Future[Behavior].
 
           If we need more throughput for this actor, we can onComplete the
           Future[Behavior] to send a message to this actor with a new Behavior,
-          which it could then become, but that seems like overkill here.
+          which it could then become.
 
-          TODO move into a 'connecting' behavior
+          Alternatively, we could add a 'connecting' Behavior.
            */
 
           Try {
@@ -99,7 +162,7 @@ object Peer extends StrictLogging {
             }
           } match {
             case Failure(exception) =>
-              logger.error(s"Encountered Exception when attempting to internalConnect to $address", exception)
+              logger.error(s"Encountered Exception when attempting to connect to $address", exception)
               Behaviors.same
 
             case Success(behavior) => behavior
@@ -127,7 +190,7 @@ object Peer extends StrictLogging {
     }
 
   /**
-   * Behavior of a `Peer` which is currently disconnecting.
+   * The [[Behavior]] of a [[Peer]] which is currently disconnecting.
    *
    * A `disconnecting` `Peer` ignores all `Command`s except a `Command` from the
    * `User` actor to `Disconnect`, which it handles by becoming `disconnected`.
@@ -136,7 +199,7 @@ object Peer extends StrictLogging {
    * @param address the `Address` of this `Peer`
    * @return a `Peer` actor `Behavior`, either `disconnecting` or `disconnected`
    */
-  def disconnecting(user: ActorRef[User.Command], address: Address): Behavior[Command] =
+  private[Peer] def disconnecting(user: ActorRef[User.Command], address: Address): Behavior[Command] =
     Behaviors.receiveMessage {
       case Disconnect =>
         logger.info(s"Disconnected from peer at $address")
@@ -151,8 +214,24 @@ object Peer extends StrictLogging {
         Behaviors.same
     }
 
-  // TODO documentation
-  def connected(user: ActorRef[User.Command], address: Address, onReceive: String => Unit, peer: ActorRef[TMS]): Behavior[Command] =
+  /**
+   * The [[Behavior]] of a connected peer.
+   *
+   * We can receive and handle [[Incoming]] messages from a connected peer, and
+   * send [[Outgoing]] messages to a connected peer. We can also [[Disconnect]]
+   * from a connected peer by sending it the [[ClosingConnection]] message.
+   *
+   * When we _receive_ a [[ClosingConnection]] message _from_ a peer, we reply
+   * with the [[ClosingConnectionAck]] message, to let the peer know that we
+   * acknowledge the termination of the connection.
+   *
+   * @param user
+   * @param address
+   * @param onReceive
+   * @param peer
+   * @return
+   */
+  private[Peer] def connected(user: ActorRef[User.Command], address: Address, onReceive: String => Unit, peer: ActorRef[TMS]): Behavior[Command] =
     Behaviors.receiveMessage {
       case Incoming(message) =>
         logger.debug(s"""Received incoming message "$message" from $address""")
@@ -171,10 +250,6 @@ object Peer extends StrictLogging {
         peer ! TextMessage.Strict(message)
         Behaviors.same
 
-      case _: RequestConnection =>
-        logger.warn(s"Cannot internalConnect to already-connected peer at $address")
-        Behaviors.same
-
       case Disconnect =>
         logger.info(s"Telling peer at $address that we're closing this connection")
         peer ! TextMessage.Strict(ClosingConnection)
@@ -189,6 +264,14 @@ object Peer extends StrictLogging {
         logger.warn(s"Connection to $address has failed. Disconnecting.", throwable)
         user ! User.Disconnect(address)
         disconnecting(user, address)
+
+      case _: RequestConnection =>
+        logger.warn(s"Cannot connect to already-connected peer at $address")
+        Behaviors.same
+
+      case other =>
+        logger.warn(s"Connected Peer received unexpected Command: $other")
+        Behaviors.same
     }
 
 }

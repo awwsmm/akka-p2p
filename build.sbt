@@ -4,8 +4,6 @@ version := "0.1"
 
 scalaVersion := "2.13.5"
 
-idePackagePrefix := Some("org.akkap2p")
-
 val AkkaVersion = "2.6.14"
 val AkkaHttpVersion = "10.2.4"
 
@@ -37,6 +35,21 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor-typed" % AkkaVersion,
   "com.typesafe.akka" %% "akka-http" % AkkaHttpVersion,
   "com.typesafe.akka" %% "akka-http-testkit" % AkkaHttpVersion,
-  "com.typesafe.akka" %% "akka-stream-typed" % AkkaVersion
+  "com.typesafe.akka" %% "akka-stream-typed" % AkkaVersion,
 
+  // interactive shell
+  "io.github.awwsmm" %% "zepto" % "0.4.0"
+
+)
+
+scalacOptions := Seq(
+//  "-deprecation"
+//  , "-feature"
+//  , "-unchecked"
+  "-Xfatal-warnings"
+//  , "-Xlint"
+//  , "-Ywarn-numeric-widen"
+//  , "-Ywarn-value-discard"
+//  , "-Yno-adapted-args"
+//  , "-Ywarn-dead-code"
 )

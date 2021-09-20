@@ -10,7 +10,6 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws._
 import com.typesafe.scalalogging.StrictLogging
 
-
 object User extends StrictLogging {
 
   sealed trait Command
