@@ -165,7 +165,7 @@ object App extends Directives with StrictLogging with JSONSupport {
         logger.error(s"""Unable to parse preconfigured peer "${array.mkString(":")}" as an Address (must follow host:port format)""")
     }
 
-    // TODO add command-line arguments
+    // TODO clean up command-line arguments
 
     object Commands {
 
@@ -189,11 +189,33 @@ object App extends Directives with StrictLogging with JSONSupport {
         }
       })
 
-      
+      val send: Command = Command("send", "send a message to a peer", args => {
+        args.split(" ", 2) match {
+          case Array(peer, message) =>
+            peer.split(":") match {
+              case Array(host, port) =>
+                Try(port.toInt) match {
+                  case Failure(_) =>
+                    logger.error(s"""Unable to send message to peer "$host:$port" -- port "$port" must be an Int""")
+
+                  case Success(value) =>
+                    val address = Address(host, value)
+                    system.ref ! User.Send(address, message)
+                }
+            }
+
+          case _ =>
+            logger.error(s"usage: send host:port remaining text to send")
+        }
+      })
+
+      val broadcast: Command = Command("broadcast", "broadcast a message to all peers", message => {
+        system.ref ! User.Broadcast(message)
+      })
 
     }
 
-    val commands = Set(Quit, Commands.hello, Commands.connect)
+    val commands = Set(Quit, Commands.hello, Commands.connect, Commands.send, Commands.broadcast)
 
     val terminal = Terminal(commands + help(commands), "\nakka-p2p> ")
 
