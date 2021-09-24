@@ -27,6 +27,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.3",
   "org.slf4j" % "slf4j-api" % "1.7.30",
   "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.3",
+  "org.apache.logging.log4j" % "log4j-api" % "2.13.3",
 
   // config
   "com.github.pureconfig" %% "pureconfig" % "0.15.0",

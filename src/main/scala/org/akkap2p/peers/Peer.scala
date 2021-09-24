@@ -86,8 +86,8 @@ object Peer extends StrictLogging {
    * }}}
    *
    * In other words, once the connection is configured correctly, the user should only need to interact with the
-   * "`peer`" `ActorRef` in order to interact with the peer -- handling `Peer.Incoming` messages _from_ the peer and
-   * sending `Peer.Outgoing` messages _to_ the peer.
+   * "`peer`" `ActorRef` in order to interact with the peer -- handling `Peer.Incoming` messages <i>from</i> the peer and
+   * sending `Peer.Outgoing` messages <i>to</i> the peer.
    *
    * @param peer the `ActorRef[Peer.Command]` used for communicating with the peer
    * @param materializer used to create the `actorRef` and `source` from an [[ActorSource.actorRef]]
