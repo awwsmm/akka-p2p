@@ -39,7 +39,7 @@ object App extends Directives with StrictLogging with JSONSupport {
 
     val ConnectionEndpoint = "connect"
 
-    implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior(config.httpPort, ConnectionEndpoint), "app")
+    implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior(config.httpPort), "app")
     implicit val executor: ExecutionContextExecutor = system.executionContext
     implicit val scheduler: Scheduler = system.scheduler
 
@@ -154,7 +154,7 @@ object App extends Directives with StrictLogging with JSONSupport {
 
     // TODO fix this so it shuts down cleanly
     bindingFuture.flatMap { binding =>
-      system.ref ! User.DisconnectAll
+      system.ref ! User.Disconnect
       binding.unbind()
 
     }.onComplete { _ =>

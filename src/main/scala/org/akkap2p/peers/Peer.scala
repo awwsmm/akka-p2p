@@ -153,7 +153,7 @@ object Peer extends StrictLogging {
             Await.result(upgradeResponse, timeout) match {
               case _: ValidUpgrade =>
                 logger.info(s"Successfully connected to $address")
-                user ! User.Connected(address, context.self)
+                user ! User.RegisterConnected(address, context.self)
                 connected(user, address, onReceive, peer)
 
               case InvalidUpgradeResponse(_, cause) =>
@@ -172,7 +172,7 @@ object Peer extends StrictLogging {
           logger.debug(s"Disconnected Peer at $address received Command to AcceptConnection")
           val (peer, source, sink) = refSourceAndSink(context.self)
           origin ! upgrade.handleMessagesWithSinkSource(sink, source)
-          user ! User.Connected(address, context.self)
+          user ! User.RegisterConnected(address, context.self)
           connected(user, address, onReceive, peer)
 
         case StreamHasFailed(SubscriptionWithCancelException.StageWasCompleted) =>

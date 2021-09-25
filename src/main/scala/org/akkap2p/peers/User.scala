@@ -10,26 +10,60 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws._
 import com.typesafe.scalalogging.StrictLogging
 
+/**
+ * The `User` actor represents the end-user of `akka-http`.
+ *
+ * The `User` can `RequestConnection`s to and `AcceptConnection`s from external `Peer`s.
+ *
+ * The `User` can also `Disconnect` from an individual `Peer` or `Disconnect` from all connected `Peer`s.
+ *
+ * The `User` can `Send` a `message` to an individual `Peer` or `Broadcast` a message to all connected `Peer`s.
+ */
 object User extends StrictLogging {
 
   sealed trait Command
 
+  /** `Command` to accept a connection from an external peer. */
   final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: String => Unit) extends Command
-  final case class RequestConnection(address: Address, onReceive: String => Unit, timeout: Duration) extends Command
-  final case class Connected(address: Address, peer: ActorRef[Peer.Command]) extends Command
 
+  /** `Command` to attempt a connection to an external peer. */
+  final case class RequestConnection(address: Address, onReceive: String => Unit, timeout: Duration) extends Command
+
+  /** `Command` received when successfully connected to an external peer. */
+  final case class RegisterConnected(address: Address, peer: ActorRef[Peer.Command]) extends Command
+
+  /** `Command` to disconnect from the peer at the specified `address`. */
+  final case class Disconnect(address: Address) extends Command
+
+  /** `Command` to disconnect from all connected peers. */
+  case object Disconnect extends Command
+
+  /** `Command` to send the `message` to the peer at the specified `address`.  */
   final case class Send(address: Address, message: String) extends Command
+
+  /** `Command` to send the `message` to all connected peers. */
   final case class Broadcast(message: String) extends Command
 
-  final case class Disconnect(address: Address) extends Command
-  case object DisconnectAll extends Command
-
+  /**
+   * A `PeerGroup` is a labeled group of `Peer`s.
+   *
+   * For example, all connected or all disconnected peers might be in a `PeerGroup`.
+   *
+   * `PeerGroup`s are not mutually exclusive; the same `Peer` may appear in several `PeerGroup`s.
+   *
+   * @param name label applied to this group of `Peer`s
+   * @param addresses the unordered set of `Address`es of this group of `Peer`s
+   */
   final case class PeerGroup(name: String, addresses: Set[Address])
+
+  /** `Command` to retrieve all known `Peer`s, sorted into `"connected"` and `"disconnected"` `PeerGroup`s. */
   final case class GetPeers(sender: ActorRef[Set[PeerGroup]]) extends Command
 
-  def behavior(localPort: Int, connectionEndpoint: String): Behavior[Command] = {
+  // TODO add documentation
+  def behavior(localPort: Int): Behavior[Command] = {
 
-    def uriString(address: Address): String = s"ws://$address/$connectionEndpoint?port=$localPort"
+    /** Only used internally, when requesting a connection to another peer. */
+    def uriString(address: Address): String = s"ws://$address/${API.ConnectionEndpoint}?port=$localPort"
 
     def withPeers(connected: Map[Address, ActorRef[Peer.Command]], disconnected: Map[Address, ActorRef[Peer.Command]]): Behavior[Command] = {
       Behaviors.receive { (context, command) =>
@@ -77,7 +111,7 @@ object User extends StrictLogging {
                 }
             }
 
-          case Connected(address: Address, peer: ActorRef[Peer.Command]) =>
+          case RegisterConnected(address: Address, peer: ActorRef[Peer.Command]) =>
             logger.info(s"Registering connected peer at $address")
             withPeers(connected + (address -> peer), disconnected - address)
 
@@ -85,7 +119,7 @@ object User extends StrictLogging {
             connected.values.foreach(_ ! Peer.Outgoing(message))
             Behaviors.same
 
-          case DisconnectAll =>
+          case Disconnect =>
             connected.values.foreach(_ ! Peer.Disconnect)
             Behaviors.same
 

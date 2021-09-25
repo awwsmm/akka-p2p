@@ -20,7 +20,7 @@ object Actions extends StrictLogging {
 
   def disconnectAll()(implicit system: ActorSystem[User.Command]): Unit = {
     logger.info("Attempting to disconnect from all peers")
-    system.ref ! User.DisconnectAll
+    system.ref ! User.Disconnect
   }
 
   def send(address: Address, message: String)(implicit system: ActorSystem[User.Command]): Unit = {
