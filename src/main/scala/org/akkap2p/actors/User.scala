@@ -1,14 +1,14 @@
 package org.akkap2p
-package peers
+package actors
 
-import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration._
+import scala.concurrent.duration.Duration
 
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior, Scheduler}
+import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.model.ws._
+import akka.http.scaladsl.model.ws.WebSocketUpgrade
 import com.typesafe.scalalogging.StrictLogging
+import org.akkap2p.model.{Address, AddressedMessage}
 
 /**
  * The `User` actor represents the end-user of `akka-http`.
@@ -38,8 +38,8 @@ object User extends StrictLogging {
   /** `Command` to disconnect from all connected peers. */
   case object Disconnect extends Command
 
-  /** `Command` to send the `message` to the peer at the specified `address`.  */
-  final case class Send(address: Address, message: String) extends Command
+  /** `Command` to send a message to a peer at a specified address. */
+  final case class Send(addressedMessage: AddressedMessage) extends Command
 
   /** `Command` to send the `message` to all connected peers. */
   final case class Broadcast(message: String) extends Command
@@ -51,7 +51,7 @@ object User extends StrictLogging {
    *
    * `PeerGroup`s are not mutually exclusive; the same `Peer` may appear in several `PeerGroup`s.
    *
-   * @param name label applied to this group of `Peer`s
+   * @param name      label applied to this group of `Peer`s
    * @param addresses the unordered set of `Address`es of this group of `Peer`s
    */
   final case class PeerGroup(name: String, addresses: Set[Address])
@@ -59,18 +59,17 @@ object User extends StrictLogging {
   /** `Command` to retrieve all known `Peer`s, sorted into `"connected"` and `"disconnected"` `PeerGroup`s. */
   final case class GetPeers(sender: ActorRef[Set[PeerGroup]]) extends Command
 
-  // TODO add documentation
-  def behavior(localPort: Int): Behavior[Command] = {
-
-    /** Only used internally, when requesting a connection to another peer. */
-    def uriString(address: Address): String = s"ws://$address/${API.ConnectionEndpoint}?port=$localPort"
+  /**
+   * The [[Behavior]] of the [[User]].
+   *
+   * The [[User]] actor keeps an internal cache of `connected` and `disconnected` [[Peer]]s.
+   *
+   * @return the [[Behavior]] of the [[User]]
+   */
+  def behavior: Behavior[Command] = {
 
     def withPeers(connected: Map[Address, ActorRef[Peer.Command]], disconnected: Map[Address, ActorRef[Peer.Command]]): Behavior[Command] = {
       Behaviors.receive { (context, command) =>
-
-        implicit val system: ActorSystem[Nothing] = context.system
-        implicit val scheduler: Scheduler = system.scheduler
-        implicit val ec: ExecutionContextExecutor = system.executionContext
 
         command match {
           case AcceptConnection(originalSender, upgrade, address, onReceive) =>
@@ -86,7 +85,7 @@ object User extends StrictLogging {
                   Behaviors.same
 
                 } else {
-                  val peer = context.spawn(Peer.disconnected(context.self, address), address.urlEncoded)
+                  val peer = context.spawn(Peer.disconnected(address), address.urlEncoded)
                   peer ! Peer.AcceptConnection(originalSender, upgrade, onReceive)
                   withPeers(connected, disconnected + (address -> peer))
                 }
@@ -96,7 +95,7 @@ object User extends StrictLogging {
             disconnected.get(address) match {
               case Some(child) =>
                 logger.info(s"Attempting to connect to known peer at $address")
-                child ! Peer.RequestConnection(uriString, timeout, onReceive)
+                child ! Peer.RequestConnection(timeout, onReceive)
                 Behaviors.same
 
               case None =>
@@ -105,8 +104,8 @@ object User extends StrictLogging {
                   Behaviors.same
 
                 } else {
-                  val peer = context.spawn(Peer.disconnected(context.self, address), address.urlEncoded)
-                  peer ! Peer.RequestConnection(uriString, timeout, onReceive)
+                  val peer = context.spawn(Peer.disconnected(address), address.urlEncoded)
+                  peer ! Peer.RequestConnection(timeout, onReceive)
                   withPeers(connected, disconnected + (address -> peer))
                 }
             }
@@ -141,7 +140,7 @@ object User extends StrictLogging {
                 }
             }
 
-          case Send(address, message) =>
+          case Send(AddressedMessage(address, message)) =>
             connected.get(address) match {
               case Some(peer) =>
                 peer ! Peer.Outgoing(message)

@@ -1,7 +1,7 @@
 package org.akkap2p
 
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
-import org.akkap2p.peers.{Address, AddressedMessage}
+import org.akkap2p.model.{Address, AddressedMessage}
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 trait JSONSupport extends DefaultJsonProtocol with SprayJsonSupport {

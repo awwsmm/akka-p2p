@@ -4,7 +4,8 @@ import akka.actor.typed.ActorSystem
 import com.typesafe.scalalogging.StrictLogging
 import io.github.awwsmm.zepto.Command.{Quit, help}
 import io.github.awwsmm.zepto.{Command, Terminal}
-import org.akkap2p.peers.{Address, User}
+import org.akkap2p.actors.User
+import org.akkap2p.model.{Address, AddressedMessage}
 
 object REPL extends StrictLogging {
 
@@ -27,7 +28,7 @@ object REPL extends StrictLogging {
 
     def send(implicit system: ActorSystem[User.Command]): Command =
       Command("send", "send a message to a peer", {
-        case s"$maybeAddress $message" => Address.ifValid(maybeAddress)(Actions.send(_, message))
+        case s"$maybeAddress $message" => Address.ifValid(maybeAddress) { address => Actions.send(AddressedMessage(address, message)) }
         case _ => logger.error(s"usage: send <host:port> <remaining text to send>")
       })
 

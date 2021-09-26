@@ -10,7 +10,8 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.peers.{Address, User}
+import org.akkap2p.actors.User
+import org.akkap2p.model.Address
 
 /**
  * Defines the API of akka-p2p.

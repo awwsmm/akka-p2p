@@ -28,3 +28,17 @@
 2021-09-25 @ 09:41:46.614 DEBUG | Sending message "this message" to localhost:3002
 2021-09-25 @ 09:41:46.635 DEBUG | Received incoming message "this message" from localhost:3001
 2021-09-25 @ 09:41:46.643  INFO | this message
+2021-09-25 @ 09:54:47.961  INFO | Slf4jLogger started
+2021-09-25 @ 09:54:48.685  INFO | Listening on localhost:3001
+2021-09-25 @ 09:54:59.221  INFO | Slf4jLogger started
+2021-09-25 @ 09:54:59.934  INFO | Listening on localhost:3002
+2021-09-25 @ 09:54:59.941 DEBUG | Attempting to connect to peer at localhost:3001
+2021-09-25 @ 09:54:59.948 DEBUG | Disconnected Peer at localhost:3001 received Command to RequestConnection
+2021-09-25 @ 09:55:00.208  INFO | Received p2p connection request from localhost:3001
+2021-09-25 @ 09:55:00.211 DEBUG | Attempting to accept incoming connection from localhost:3001
+2021-09-25 @ 09:55:00.218 DEBUG | Disconnected Peer at localhost:3001 received Command to AcceptConnection
+2021-09-25 @ 09:55:00.266  INFO | Registering connected peer at localhost:3001
+2021-09-25 @ 09:55:00.322  INFO | Successfully connected to localhost:3001
+2021-09-25 @ 09:55:00.323  INFO | Registering connected peer at localhost:3001
+2021-09-25 @ 09:55:11.895 DEBUG | Attempting to send message "blep" to peer at localhost:3002
+2021-09-25 @ 09:55:11.897  INFO | Cannot send message to unknown peer at localhost:3002

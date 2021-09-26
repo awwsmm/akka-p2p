@@ -4,7 +4,8 @@ import scala.concurrent.duration.DurationInt
 
 import akka.actor.typed.ActorSystem
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.peers.{Address, User}
+import org.akkap2p.actors.User
+import org.akkap2p.model.{Address, AddressedMessage}
 
 object Actions extends StrictLogging {
 
@@ -23,9 +24,10 @@ object Actions extends StrictLogging {
     system.ref ! User.Disconnect
   }
 
-  def send(address: Address, message: String)(implicit system: ActorSystem[User.Command]): Unit = {
+  def send(addressedMessage: AddressedMessage)(implicit system: ActorSystem[User.Command]): Unit = {
+    val AddressedMessage(address, message) = addressedMessage
     logger.debug(s"""Attempting to send message "$message" to peer at $address""")
-    system.ref ! User.Send(address, message)
+    system.ref ! User.Send(addressedMessage)
   }
 
   def broadcast(message: String)(implicit system: ActorSystem[User.Command]): Unit = {

@@ -5,55 +5,50 @@ import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
 import akka.actor.typed.scaladsl.AskPattern.Askable
-import akka.actor.typed.{ActorSystem, Scheduler}
+import akka.actor.typed.{ActorRef, ActorSystem, Scheduler}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.peers.{Address, AddressedMessage, User}
+import org.akkap2p.actors.User
+import org.akkap2p.model.{Address, AddressedMessage}
 import pureconfig.ConfigSource
 import upickle.default.write
 
-object App extends Directives with StrictLogging with JSONSupport {
+object Main extends Directives with StrictLogging with JSONSupport {
 
-  // TODO send logs to file instead of to stdout
+  /** Configuration for akka-p2p read from application.conf. */
+  val config: Config = {
+    import pureconfig.generic.auto._
+    ConfigSource.default.load[Config] match {
+      case Right(value) => value
+      case Left(reasons) =>
+        val msg = s"Cannot start App. Invalid config: $reasons"
+        logger.error(msg)
+        throw new IllegalArgumentException(msg)
+    }
+  }
+
+  private[this] implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior, "app")
+  private[this] implicit val executor: ExecutionContextExecutor = system.executionContext
+  private[this] implicit val scheduler: Scheduler = system.scheduler
+
+  val user: ActorRef[User.Command] = system.narrow
 
   // TODO assess required libraries in build.sbt
 
-  def main(args: Array[String]): Unit = {
+  // TODO clean up all these .seconds and askTimeout timeouts -- into config
 
-    final case class AppConfig(httpHost: String, httpPort: Int, peers: String)
+  object Routes {
 
-    val config: AppConfig = {
-      import pureconfig.generic.auto._
-
-      ConfigSource.default.load[AppConfig] match {
-        case Right(value) => value
-        case Left(reasons) =>
-          val msg = s"Cannot start App. Invalid config: $reasons"
-          logger.error(msg)
-          throw new IllegalArgumentException(msg)
-      }
-    }
-
-    val ConnectionEndpoint = "connect"
-
-    implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior(config.httpPort), "app")
-    implicit val executor: ExecutionContextExecutor = system.executionContext
-    implicit val scheduler: Scheduler = system.scheduler
-
-    // TODO clean up all these .seconds and askTimeout timeouts -- into config
-
-    object Routes {
-
-      val connect: Route = path(ConnectionEndpoint) {
-        put {
-          entity(as[Address]) { address =>
-            Actions.connect(address)
-            complete(StatusCodes.OK)
-          }
-        } ~
+    val connect: Route = path(API.ConnectionEndpoint) {
+      put {
+        entity(as[Address]) { address =>
+          Actions.connect(address)
+          complete(StatusCodes.OK)
+        }
+      } ~
         extractHost { host =>
           parameters("port") { portStr =>
 
@@ -78,43 +73,43 @@ object App extends Directives with StrictLogging with JSONSupport {
             }
           }
         }
-      }
+    }
 
-      val disconnect: Route = path("disconnect") {
-        put {
-          entity(as[Address]) { address =>
-            Actions.disconnect(address)
-            complete(StatusCodes.OK)
-          }
-        } ~
+    val disconnect: Route = path("disconnect") {
+      put {
+        entity(as[Address]) { address =>
+          Actions.disconnect(address)
+          complete(StatusCodes.OK)
+        }
+      } ~
         put {
           Actions.disconnectAll()
           complete(StatusCodes.OK)
         }
-      }
+    }
 
-      /**
-       * GET request endpoint which returns a JSON response with the addresses
-       * of all connected and disconnected org.akkap2p.peers.
-       */
-      val peers: Route = path("peers") {
-        get {
-          logger.info(s"Received external query for org.akkap2p.peers")
+    /**
+     * GET request endpoint which returns a JSON response with the addresses
+     * of all connected and disconnected peers.
+     */
+    val peers: Route = path("peers") {
+      get {
+        logger.info(s"Received external query for peers")
 
-          implicit val askTimeout: Timeout = 3.seconds
+        implicit val askTimeout: Timeout = 3.seconds
 
-          onComplete(system.ref ? User.GetPeers) {
-            case Failure(exception) =>
-              complete(exception)
+        onComplete(system.ref ? User.GetPeers) {
+          case Failure(exception) =>
+            complete(exception)
 
-            case Success(groups) =>
-              val map = groups.map(g => g.name -> g.addresses.map(_.toString))
-              complete(write(map.toMap))
-          }
+          case Success(groups) =>
+            val map = groups.map(g => g.name -> g.addresses.map(_.toString))
+            complete(write(map.toMap))
         }
       }
+    }
 
-      /*
+    /*
       Example body:
           {
             "address": {
@@ -124,20 +119,25 @@ object App extends Directives with StrictLogging with JSONSupport {
             "message": "hey"
           }
        */
-      val send: Route = path("send") {
-        post {
-          entity(as[AddressedMessage]) { case AddressedMessage(address, body) =>
-            Actions.send(address, body)
-            complete(StatusCodes.OK)
-          } ~
+    val send: Route = path("send") {
+
+      // TODO: consider making AddressedMessage local to this block
+
+      post {
+        entity(as[AddressedMessage]) { addressedMessage =>
+          Actions.send(addressedMessage)
+          complete(StatusCodes.OK)
+        } ~
           entity(as[String]) { body =>
             Actions.broadcast(body)
             complete(StatusCodes.OK)
           }
-        }
       }
-
     }
+
+  }
+
+  def main(args: Array[String]): Unit = {
 
     val bindingFuture = Http()
       .newServerAt(config.httpHost, config.httpPort)
@@ -160,6 +160,5 @@ object App extends Directives with StrictLogging with JSONSupport {
     }.onComplete { _ =>
       system.terminate()
     }
-
   }
 }
