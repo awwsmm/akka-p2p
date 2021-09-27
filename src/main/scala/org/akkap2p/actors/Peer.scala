@@ -21,9 +21,6 @@ import org.scalactic.TypeCheckedTripleEquals._
 
 object Peer extends StrictLogging {
 
-  private val user = Main.user
-  private val config = Main.config
-
   private val ClosingConnection = "[[[goodbye"
   private val ClosingConnectionAck = "adios]]]"
 
@@ -61,7 +58,7 @@ object Peer extends StrictLogging {
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnected`
    */
-  def disconnected(address: Address): Behavior[Command] =
+  def disconnected(address: Address)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
     Behaviors.receive { (context, command) =>
 
       implicit val system: ActorSystem[Nothing] = context.system
@@ -152,7 +149,7 @@ object Peer extends StrictLogging {
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `disconnecting` or `disconnected`
    */
-  private[this] def disconnecting(address: Address): Behavior[Command] =
+  private[this] def disconnecting(address: Address)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Disconnect =>
         logger.info(s"Disconnected from peer at $address")
@@ -181,7 +178,7 @@ object Peer extends StrictLogging {
    * @param peer      messages to be sent to this `Peer` are sent to this actor
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnecting`
    */
-  private[this] def connected(address: Address, onReceive: String => Unit, peer: ActorRef[TMS]): Behavior[Command] =
+  private[this] def connected(address: Address, onReceive: String => Unit, peer: ActorRef[TMS])(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Incoming(message) =>
         logger.debug(s"""Received incoming message "$message" from $address""")

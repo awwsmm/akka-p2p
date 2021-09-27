@@ -25,7 +25,7 @@ object Address extends StrictLogging {
    * @param maybeAddress the `String` to parse as an `Address`
    * @param f the function to apply to the `Address`
    */
-  def ifValid(maybeAddress: String)(f: Address => Unit): Unit = fromString(maybeAddress).foreach(f)
+  def ifValid(maybeAddress: String)(f: Address => Option[String]): Option[String] = fromString(maybeAddress).flatMap(f)
 
   /**
    * Attempts to parse the given `String` as an [[Address]] in '''host:port''' format

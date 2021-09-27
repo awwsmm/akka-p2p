@@ -39,7 +39,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-stream-typed" % AkkaVersion,
 
   // interactive shell
-  "io.github.awwsmm" %% "zepto" % "0.4.0"
+  "io.github.awwsmm" %% "zepto" % "1.0.0"
 
 )
 

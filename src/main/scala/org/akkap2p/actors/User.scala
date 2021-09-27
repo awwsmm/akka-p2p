@@ -8,7 +8,7 @@ import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws.WebSocketUpgrade
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.model.{Address, AddressedMessage}
+import org.akkap2p.model.Address
 
 /**
  * The `User` actor represents the end-user of `akka-http`.
@@ -39,7 +39,7 @@ object User extends StrictLogging {
   case object Disconnect extends Command
 
   /** `Command` to send a message to a peer at a specified address. */
-  final case class Send(addressedMessage: AddressedMessage) extends Command
+  final case class Send(address: Address, message: String) extends Command
 
   /** `Command` to send the `message` to all connected peers. */
   final case class Broadcast(message: String) extends Command
@@ -66,10 +66,12 @@ object User extends StrictLogging {
    *
    * @return the [[Behavior]] of the [[User]]
    */
-  def behavior: Behavior[Command] = {
+  def behavior(implicit config: Main.Config): Behavior[Command] = {
 
     def withPeers(connected: Map[Address, ActorRef[Peer.Command]], disconnected: Map[Address, ActorRef[Peer.Command]]): Behavior[Command] = {
       Behaviors.receive { (context, command) =>
+
+        implicit val user: ActorRef[Command] = context.self
 
         command match {
           case AcceptConnection(originalSender, upgrade, address, onReceive) =>
@@ -140,7 +142,7 @@ object User extends StrictLogging {
                 }
             }
 
-          case Send(AddressedMessage(address, message)) =>
+          case Send(address, message) =>
             connected.get(address) match {
               case Some(peer) =>
                 peer ! Peer.Outgoing(message)

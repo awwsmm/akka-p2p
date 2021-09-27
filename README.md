@@ -29,8 +29,6 @@ Then, `run` with `sbt`
 
 ```bash
 $ sbt -error run
-2021-09-24 @ 18:37:47.777  INFO | Slf4jLogger started
-2021-09-24 @ 18:37:48.365  INFO | Listening on localhost:3001
 
 akka-p2p> help
 broadcast => broadcast a message to all peers
@@ -54,8 +52,6 @@ $ cd akka-p2p
 $ export AKKA_P2P_HTTP_PORT=3002
 
 $ sbt -error run
-2021-09-24 @ 18:51:14.309  INFO | Slf4jLogger started
-2021-09-24 @ 18:51:14.912  INFO | Listening on localhost:3002
 
 akka-p2p>
 ```
@@ -66,15 +62,8 @@ Connect to a peer with the `connect` command
 
 ```bash
 $ sbt -error run
-2021-09-24 @ 18:51:14.309  INFO | Slf4jLogger started
-2021-09-24 @ 18:51:14.912  INFO | Listening on localhost:3002
 
 akka-p2p> connect localhost:3001
-2021-09-24 @ 18:52:41.597 DEBUG | Attempting to connect to peer at localhost:3001
-
-akka-p2p> 2021-09-24 @ 18:52:41.606 DEBUG | Disconnected Peer at localhost:3001 received Command to RequestConnection
-2021-09-24 @ 18:52:42.125  INFO | Successfully connected to localhost:3001
-2021-09-24 @ 18:52:42.125  INFO | Registering connected peer at localhost:3001
 
 akka-p2p>
 ```
