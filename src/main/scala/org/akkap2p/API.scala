@@ -14,7 +14,6 @@ import com.typesafe.scalalogging.StrictLogging
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
-import upickle.default.write
 
 /** Defines the API of '''akka-p2p'''. */
 object API extends Directives with StrictLogging with DefaultJsonProtocol with SprayJsonSupport {
@@ -88,8 +87,8 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
             complete(exception)
 
           case Success(groups) =>
-            val map = groups.map(g => g.name -> g.addresses.map(_.toString))
-            complete(write(map.toMap))
+            val map = groups.map(g => g.name -> g.addresses.map(_.toString).toSeq).toMap
+            complete(map)
         }
       }
     }

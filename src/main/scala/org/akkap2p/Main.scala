@@ -13,7 +13,6 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
-import org.scalactic.TypeCheckedTripleEquals._
 import pureconfig.ConfigSource
 
 // TODO assess required libraries in build.sbt
@@ -76,7 +75,7 @@ object Main extends Directives with StrictLogging {
 
         // We do not terminate until there are no more connected peers.
         futurePeerGroups.map { groups =>
-          groups.find(_.name === "connected") match {
+          groups.find(_.name == "connected") match {
             case Some(connected) if connected.addresses.nonEmpty =>
               throw new IllegalStateException("""PeerGroup "connected" is not empty.""")
             case None =>

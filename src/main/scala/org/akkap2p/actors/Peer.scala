@@ -17,7 +17,6 @@ import akka.stream.typed.scaladsl.{ActorSink, ActorSource}
 import akka.stream.{KillSwitches, OverflowStrategy, SubscriptionWithCancelException, UniqueKillSwitch}
 import com.typesafe.scalalogging.StrictLogging
 import org.akkap2p.model.{Address, AddressedMessage}
-import org.scalactic.TypeCheckedTripleEquals._
 
 /**
  * The `Peer` actor represents other users of `akka-p2p`.
@@ -198,7 +197,7 @@ object Peer extends StrictLogging {
     Behaviors.receiveMessage {
       case Incoming(message) =>
         logger.debug(s"""Received incoming message "$message" from $address""")
-        if (message === ClosingConnection) {
+        if (message == ClosingConnection) {
           logger.debug(s""""$ClosingConnection" is the "ClosingConnection" message -- disconnecting""")
           peer ! TextMessage.Strict(ClosingConnectionAck)
           user ! User.Disconnect(address)
