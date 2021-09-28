@@ -38,10 +38,12 @@ object Main extends Directives with StrictLogging {
 
   def main(args: Array[String]): Unit = {
 
+    val prompt = "\nakka-p2p> "
+
     // what do we do when we receive a message from a peer?
     def onReceive(addressedMessage: AddressedMessage): Unit = {
       val AddressedMessage(address, message) = addressedMessage
-      println(s"""$address: "$message"""")
+      print(s"""$address: "$message"\n$prompt""")
     }
 
     implicit val system: ActorSystem[User.Command] = ActorSystem(User.behavior, "app")
@@ -58,7 +60,7 @@ object Main extends Directives with StrictLogging {
     config.peers.split(",").filter(_.nonEmpty).flatMap(Address.fromString).foreach(Actions.connect(_, onReceive))
 
     // run the Terminal (this blocks until the user `quit`s)
-    Terminal(onReceive).run()
+    Terminal(prompt, onReceive).run()
     Actions.disconnectAll()
 
     implicit val executor: ExecutionContextExecutor = system.executionContext

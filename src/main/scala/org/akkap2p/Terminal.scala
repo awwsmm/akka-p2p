@@ -45,12 +45,11 @@ object Terminal extends StrictLogging {
       })
 
     val all: Set[Command] = Set(connect, disconnect, logout, send, broadcast, Quit)
-
   }
 
-  def apply(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]): io.github.awwsmm.zepto.Terminal = {
+  def apply(prompt: String, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]): io.github.awwsmm.zepto.Terminal = {
     val commands = new Commands(onReceive)
-    new io.github.awwsmm.zepto.Terminal(commands.all + help(commands.all), "\nakka-p2p> ")
+    new io.github.awwsmm.zepto.Terminal(commands.all + help(commands.all), prompt)
   }
 
 }
