@@ -1,19 +1,18 @@
 package org.akkap2p
 
-import scala.concurrent.duration.DurationInt
-
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.AskPattern.Askable
 import com.typesafe.scalalogging.StrictLogging
+import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 
 object Actions extends StrictLogging {
 
-  def connect(address: Address, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]): Option[String] = {
+  def connect(address: Address, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config): Option[String] = {
     val msg = s"Attempting to request connect to peer at $address"
     logger.debug(msg)
-    system.ref ! User.RequestConnection(address, onReceive, 10.seconds)
+    system.ref ! User.RequestConnection(address, onReceive, config.timeouts.requestConnection)
     Some(msg)
   }
 

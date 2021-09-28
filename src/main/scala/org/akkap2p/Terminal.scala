@@ -4,12 +4,13 @@ import akka.actor.typed.ActorSystem
 import com.typesafe.scalalogging.StrictLogging
 import io.github.awwsmm.zepto.Command
 import io.github.awwsmm.zepto.Command.{Quit, help}
+import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 
 object Terminal extends StrictLogging {
 
-  private[this] class Commands(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) {
+  private[this] class Commands(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config) {
 
     final val connect =
       Command("connect", "connects to a peer", { maybeAddress =>
@@ -47,7 +48,7 @@ object Terminal extends StrictLogging {
     val all: Set[Command] = Set(connect, disconnect, logout, send, broadcast, Quit)
   }
 
-  def apply(prompt: String, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]): io.github.awwsmm.zepto.Terminal = {
+  def apply(prompt: String, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config): io.github.awwsmm.zepto.Terminal = {
     val commands = new Commands(onReceive)
     new io.github.awwsmm.zepto.Terminal(commands.all + help(commands.all), prompt)
   }

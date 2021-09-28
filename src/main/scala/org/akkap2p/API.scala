@@ -1,7 +1,6 @@
 package org.akkap2p
 
 import scala.concurrent.Future
-import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 import akka.actor.typed.scaladsl.AskPattern.Askable
@@ -11,6 +10,7 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
+import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
@@ -22,7 +22,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
 
   implicit val addressFormat: RootJsonFormat[Address] = jsonFormat2(Address.apply)
 
-  class Routes(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) {
+  class Routes(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config) {
 
     implicit val scheduler: Scheduler = system.scheduler
 
@@ -43,8 +43,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
 
           extractWebSocketUpgrade { upgrade =>
             logger.debug(s"Attempting to accept incoming connection from $address")
-
-            implicit val askTimeout: Timeout = 3.seconds
+            implicit val askTimeout: Timeout = config.timeouts.acceptConnection
 
             val futureResponse: Future[HttpResponse] =
               system.ref ? { User.AcceptConnection(_, upgrade, address, onReceive) }
@@ -79,8 +78,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
     val peers: Route = path("peers") {
       get {
         logger.info(s"Received external query for peers")
-
-        implicit val askTimeout: Timeout = 3.seconds
+        implicit val askTimeout: Timeout = config.timeouts.getPeers
 
         onComplete(system.ref ? User.GetPeers) {
           case Failure(exception) =>
@@ -123,6 +121,6 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
     val all: Route = connect ~ disconnect ~ peers ~ send
   }
 
-  def apply(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) = new Routes(onReceive)
+  def apply(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config) = new Routes(onReceive)
 
 }

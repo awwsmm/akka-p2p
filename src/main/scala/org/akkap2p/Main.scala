@@ -15,13 +15,10 @@ import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 import pureconfig.ConfigSource
 
-// TODO assess required libraries in build.sbt
-
-// TODO clean up all these .seconds and askTimeout timeouts -- into config
-
 object Main extends Directives with StrictLogging {
 
-  final case class Config(httpHost: String, httpPort: Int, peers: String)
+  final case class Timeouts(requestConnection: FiniteDuration, acceptConnection: FiniteDuration, getPeers: FiniteDuration)
+  final case class Config(httpHost: String, httpPort: Int, peers: String, timeouts: Timeouts)
 
   // Configuration for akka-p2p read from application.conf
   private[this] implicit val config: Config = {
@@ -69,7 +66,7 @@ object Main extends Directives with StrictLogging {
 
       def close(): Future[Unit] = {
 
-        implicit val timeout: Timeout = 5.seconds
+        implicit val timeout: Timeout = config.timeouts.getPeers
         implicit val scheduler: Scheduler = system.scheduler
         val futurePeerGroups = system.ref ? User.GetPeers
 
