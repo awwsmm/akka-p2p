@@ -8,7 +8,7 @@ import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.ws.WebSocketUpgrade
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.model.Address
+import org.akkap2p.model.{Address, AddressedMessage}
 
 /**
  * The `User` actor represents the end-user of `akka-http`.
@@ -24,10 +24,10 @@ object User extends StrictLogging {
   sealed trait Command
 
   /** `Command` to accept a connection from an external peer. */
-  final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: String => Unit) extends Command
+  final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: AddressedMessage => Unit) extends Command
 
   /** `Command` to attempt a connection to an external peer. */
-  final case class RequestConnection(address: Address, onReceive: String => Unit, timeout: Duration) extends Command
+  final case class RequestConnection(address: Address, onReceive: AddressedMessage => Unit, timeout: Duration) extends Command
 
   /** `Command` received when successfully connected to an external peer. */
   final case class RegisterConnected(address: Address, peer: ActorRef[Peer.Command]) extends Command
@@ -76,9 +76,9 @@ object User extends StrictLogging {
         command match {
           case AcceptConnection(originalSender, upgrade, address, onReceive) =>
             disconnected.get(address) match {
-              case Some(child) =>
+              case Some(peer) =>
                 logger.info(s"Attempting to accept connection from known peer at $address")
-                child ! Peer.AcceptConnection(originalSender, upgrade, onReceive)
+                peer ! Peer.ConnectionAccepted(originalSender, upgrade, onReceive)
                 Behaviors.same
 
               case None =>
@@ -88,16 +88,17 @@ object User extends StrictLogging {
 
                 } else {
                   val peer = context.spawn(Peer.disconnected(address), address.urlEncoded)
-                  peer ! Peer.AcceptConnection(originalSender, upgrade, onReceive)
+                  logger.info(s"Attempting to accept connection from new peer at $address")
+                  peer ! Peer.ConnectionAccepted(originalSender, upgrade, onReceive)
                   withPeers(connected, disconnected + (address -> peer))
                 }
             }
 
           case RequestConnection(address, onReceive, timeout) =>
             disconnected.get(address) match {
-              case Some(child) =>
+              case Some(peer) =>
                 logger.info(s"Attempting to connect to known peer at $address")
-                child ! Peer.RequestConnection(timeout, onReceive)
+                peer ! Peer.ConnectionRequested(timeout, onReceive)
                 Behaviors.same
 
               case None =>
@@ -106,8 +107,9 @@ object User extends StrictLogging {
                   Behaviors.same
 
                 } else {
+                  logger.info(s"Attempting to connect to new peer at $address")
                   val peer = context.spawn(Peer.disconnected(address), address.urlEncoded)
-                  peer ! Peer.RequestConnection(timeout, onReceive)
+                  peer ! Peer.ConnectionRequested(timeout, onReceive)
                   withPeers(connected, disconnected + (address -> peer))
                 }
             }

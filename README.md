@@ -72,9 +72,7 @@ And send a message with the `send` command
 
 ```bash
 akka-p2p> send localhost:3001 hi from localhost:3002
-2021-09-24 @ 18:53:31.288 DEBUG | Attempting to send message "hi from localhost:3002" to peer at localhost:3001
-
-akka-p2p> 2021-09-24 @ 18:53:31.292 DEBUG | Sending message "hi from localhost:3002" to localhost:3001
+Attempting to send message "hi from localhost:3002" to peer at localhost:3001
 
 akka-p2p>
 ```
@@ -82,12 +80,7 @@ akka-p2p>
 Your peer will see
 
 ```bash
-akka-p2p> 2021-09-24 @ 18:52:41.963  INFO | Received p2p connection request from localhost:3002
-2021-09-24 @ 18:52:41.967 DEBUG | Attempting to accept incoming connection from localhost:3002
-2021-09-24 @ 18:52:41.978 DEBUG | Disconnected Peer at localhost:3002 received Command to AcceptConnection
-2021-09-24 @ 18:52:42.057  INFO | Registering connected peer at localhost:3002
-2021-09-24 @ 18:53:31.307 DEBUG | Received incoming message "hi from localhost:3002" from localhost:3002
-2021-09-24 @ 18:53:31.319  INFO | hi from localhost:3002
+akka-p2p> localhost:3002: "hi from localhost:3002"
 
 akka-p2p>
 ```
@@ -110,8 +103,6 @@ Then just run _akka-p2p_ as normal
 ```bash
 $ sbt run
 ...
-2021-09-24 @ 18:09:00.290  INFO | Slf4jLogger started
-2021-09-24 @ 18:09:00.776  INFO | Listening on localhost:5555
 
 akka-p2p>
 ```

@@ -5,15 +5,15 @@ import com.typesafe.scalalogging.StrictLogging
 import io.github.awwsmm.zepto.Command
 import io.github.awwsmm.zepto.Command.{Quit, help}
 import org.akkap2p.actors.User
-import org.akkap2p.model.Address
+import org.akkap2p.model.{Address, AddressedMessage}
 
 object Terminal extends StrictLogging {
 
-  private[this] class Commands(implicit system: ActorSystem[User.Command]) {
+  private[this] class Commands(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) {
 
     final val connect =
       Command("connect", "connects to a peer", { maybeAddress =>
-        Address.ifValid(maybeAddress.getOrElse(""))(Actions.connect)
+        Address.ifValid(maybeAddress.getOrElse(""))(Actions.connect(_, onReceive))
       })
 
     final val disconnect =
@@ -48,8 +48,8 @@ object Terminal extends StrictLogging {
 
   }
 
-  def apply()(implicit system: ActorSystem[User.Command]): io.github.awwsmm.zepto.Terminal = {
-    val commands = new Commands
+  def apply(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]): io.github.awwsmm.zepto.Terminal = {
+    val commands = new Commands(onReceive)
     new io.github.awwsmm.zepto.Terminal(commands.all + help(commands.all), "\nakka-p2p> ")
   }
 

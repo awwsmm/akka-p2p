@@ -12,7 +12,7 @@ import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
 import org.akkap2p.actors.User
-import org.akkap2p.model.Address
+import org.akkap2p.model.{Address, AddressedMessage}
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 import upickle.default.write
 
@@ -23,7 +23,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
 
   implicit val addressFormat: RootJsonFormat[Address] = jsonFormat2(Address.apply)
 
-  class Routes(implicit system: ActorSystem[User.Command]) {
+  class Routes(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) {
 
     implicit val scheduler: Scheduler = system.scheduler
 
@@ -31,7 +31,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
     val connect: Route = path(ConnectionEndpoint) {
       put {
         entity(as[Address]) { address =>
-          Actions.connect(address)
+          Actions.connect(address, onReceive)
           complete(StatusCodes.OK)
         }
       } ~
@@ -48,7 +48,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
             implicit val askTimeout: Timeout = 3.seconds
 
             val futureResponse: Future[HttpResponse] =
-              system.ref ? { User.AcceptConnection(_, upgrade, address, x => println(s"A: $x")) }
+              system.ref ? { User.AcceptConnection(_, upgrade, address, onReceive) }
 
             onComplete(futureResponse) {
               case Failure(exception) => complete(exception)
@@ -107,8 +107,6 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
     /** Route to send a message to one or more peers. */
     val send: Route = path("send") {
 
-      final case class AddressedMessage(address: Address, message: String)
-
       implicit val addressedMessageFormat: RootJsonFormat[AddressedMessage] = jsonFormat2(AddressedMessage)
 
       post {
@@ -124,9 +122,8 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
     }
 
     val all: Route = connect ~ disconnect ~ peers ~ send
-
   }
 
-  def apply()(implicit system: ActorSystem[User.Command]) = new Routes()
+  def apply(onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command]) = new Routes(onReceive)
 
 }

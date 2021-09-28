@@ -14,11 +14,24 @@ import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model.{HttpResponse, Uri}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.stream.typed.scaladsl.{ActorSink, ActorSource}
-import akka.stream.{OverflowStrategy, SubscriptionWithCancelException}
+import akka.stream.{KillSwitches, OverflowStrategy, SubscriptionWithCancelException, UniqueKillSwitch}
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.model.Address
+import org.akkap2p.model.{Address, AddressedMessage}
 import org.scalactic.TypeCheckedTripleEquals._
 
+/**
+ * The `Peer` actor represents other users of `akka-p2p`.
+ *
+ * The `Peer` can request connections from the `User`, which responds with a `ConnectionAccepted`.
+ *
+ * The `User` can request connections to the `Peer` by sending it a `ConnectionRequested` message.
+ *
+ * The `User` can tell the `Peer` that its closing the connection by sending it a `Disconnect` message.
+ *
+ * Messages to the `Peer` are sent to it as `Outgoing` messages.
+ *
+ * Messages from the `Peer` are received as `Incoming` messages and handled with the `onReceive` behavior.
+ */
 object Peer extends StrictLogging {
 
   private val ClosingConnection = "[[[goodbye"
@@ -26,13 +39,13 @@ object Peer extends StrictLogging {
 
   sealed trait Command
 
-  /** `Command` the external `Peer` to accept the connection from this `User`. */
-  final case class AcceptConnection(origin: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, onReceive: String => Unit) extends Command
+  /** Tell the external `Peer` that this `User` has accepted their connection request. */
+  final case class ConnectionAccepted(origin: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, onReceive: AddressedMessage => Unit) extends Command
 
-  /** `Command` the external `Peer` to request a connection to this `User`. */
-  final case class RequestConnection(timeout: Duration, onReceive: String => Unit) extends Command
+  /** Tell the external `Peer` that this `User` has requested a connection. */
+  final case class ConnectionRequested(timeout: Duration, onReceive: AddressedMessage => Unit) extends Command
 
-  /** `Command` the external `Peer` to close its connection to this `User`. */
+  /** Tell the external `Peer` that this `User` is closing the connection. */
   case object Disconnect extends Command
 
   /** Represents a message from this `User` to the external `Peer`. */
@@ -51,9 +64,9 @@ object Peer extends StrictLogging {
    * The [[Behavior]] of a disconnected [[Peer]].
    *
    * All `Peer`s start with this `disconnected` behavior. A `Peer` may become [[connected]] after it receives and
-   * handles a [[RequestConnection]] or [[AcceptConnection]] message.
+   * handles a [[ConnectionRequested]] or [[ConnectionAccepted]] message.
    *
-   * A `disconnected` `Peer` ignores all `Command`s except `RequestConnection` and `AcceptConnection`.
+   * A `disconnected` `Peer` ignores all `Command`s except `ConnectionRequested` and `ConnectionAccepted`.
    *
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnected`
@@ -63,11 +76,12 @@ object Peer extends StrictLogging {
 
       implicit val system: ActorSystem[Nothing] = context.system
 
-      def refSourceAndSink: (ActorRef[TMS], Source[TMS, NotUsed], Sink[Message, NotUsed]) = {
+      def refSourceSinkSwitch: (ActorRef[TMS], Source[TMS, NotUsed], Sink[Message, NotUsed], UniqueKillSwitch) = {
 
         val completeOn = Map(TMS(ClosingConnectionAck) -> ())
         val actorSource = ActorSource.actorRef[TMS](completeOn, Map.empty, 10, OverflowStrategy.dropBuffer)
-        val (actorRef, source) = actorSource.preMaterialize()
+        val killableSource = actorSource.viaMat(KillSwitches.single)(Keep.both)
+        val ((actorRef, killSwitch), source) = killableSource.preMaterialize()
 
         val actorSink = ActorSink.actorRef[Command](context.self, StreamHasCompleted, StreamHasFailed)
 
@@ -77,15 +91,15 @@ object Peer extends StrictLogging {
           case _ => None
         }.collect({ case Some(string) => Incoming(string) }).toMat(actorSink)(Keep.none)
 
-        (actorRef, source, sink)
+        (actorRef, source, sink, killSwitch)
       }
 
       command match {
-        case RequestConnection(timeout, onReceive) =>
-          logger.debug(s"Disconnected Peer at $address received Command to RequestConnection")
+        case ConnectionRequested(timeout, onReceive) =>
+          logger.debug(s"Disconnected peer at $address received connection request from user")
 
           val uri = Uri(s"ws://$address/${API.ConnectionEndpoint}?port=${config.httpPort}")
-          val (peer, source, sink) = refSourceAndSink
+          val (peer, source, sink, killSwitch) = refSourceSinkSwitch
           val webSocket = Http().webSocketClientFlow(WebSocketRequest(uri))
           val upgradeResponse = source.viaMat(webSocket)(Keep.right).toMat(sink)(Keep.left).run()
 
@@ -106,7 +120,7 @@ object Peer extends StrictLogging {
               case _: ValidUpgrade =>
                 logger.info(s"Successfully connected to $address")
                 user ! User.RegisterConnected(address, context.self)
-                connected(address, onReceive, peer)
+                connected(address, onReceive, peer, killSwitch)
 
               case InvalidUpgradeResponse(_, cause) =>
                 logger.error(s"Received InvalidUpgradeResponse from $address: $cause")
@@ -120,12 +134,12 @@ object Peer extends StrictLogging {
             case Success(behavior) => behavior
           }
 
-        case AcceptConnection(origin, upgrade, onReceive) =>
-          logger.debug(s"Disconnected Peer at $address received Command to AcceptConnection")
-          val (peer, source, sink) = refSourceAndSink
+        case ConnectionAccepted(origin, upgrade, onReceive) =>
+          logger.debug(s"Accepted connection request from disconnected Peer at $address")
+          val (peer, source, sink, killSwitch) = refSourceSinkSwitch
           origin ! upgrade.handleMessagesWithSinkSource(sink, source)
           user ! User.RegisterConnected(address, context.self)
-          connected(address, onReceive, peer)
+          connected(address, onReceive, peer, killSwitch)
 
         case StreamHasFailed(SubscriptionWithCancelException.StageWasCompleted) =>
           logger.debug("Connection closed by peer")
@@ -149,7 +163,7 @@ object Peer extends StrictLogging {
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `disconnecting` or `disconnected`
    */
-  private[this] def disconnecting(address: Address)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
+  private[this] def disconnecting(address: Address, killSwitch: UniqueKillSwitch)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Disconnect =>
         logger.info(s"Disconnected from peer at $address")
@@ -157,6 +171,7 @@ object Peer extends StrictLogging {
 
       case StreamHasCompleted =>
         logger.debug("Connection confirmed closed")
+        killSwitch.shutdown()
         Behaviors.same
 
       case other =>
@@ -178,7 +193,8 @@ object Peer extends StrictLogging {
    * @param peer      messages to be sent to this `Peer` are sent to this actor
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnecting`
    */
-  private[this] def connected(address: Address, onReceive: String => Unit, peer: ActorRef[TMS])(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
+  private[this] def connected(address: Address, onReceive: AddressedMessage => Unit, peer: ActorRef[TMS], killSwitch: UniqueKillSwitch
+                             )(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Incoming(message) =>
         logger.debug(s"""Received incoming message "$message" from $address""")
@@ -186,9 +202,9 @@ object Peer extends StrictLogging {
           logger.debug(s""""$ClosingConnection" is the "ClosingConnection" message -- disconnecting""")
           peer ! TextMessage.Strict(ClosingConnectionAck)
           user ! User.Disconnect(address)
-          disconnecting(address)
+          disconnecting(address, killSwitch)
         } else {
-          onReceive(message)
+          onReceive(AddressedMessage(address, message))
           Behaviors.same
         }
 
@@ -200,19 +216,19 @@ object Peer extends StrictLogging {
       case Disconnect =>
         logger.info(s"Telling peer at $address that we're closing this connection")
         peer ! TextMessage.Strict(ClosingConnection)
-        disconnecting(address)
+        disconnecting(address, killSwitch)
 
       case StreamHasCompleted =>
         logger.info(s"Connection to $address has been closed")
         user ! User.Disconnect(address)
-        disconnecting(address)
+        disconnecting(address, killSwitch)
 
       case StreamHasFailed(throwable) =>
         logger.warn(s"Connection to $address has failed. Disconnecting.", throwable)
         user ! User.Disconnect(address)
-        disconnecting(address)
+        disconnecting(address, killSwitch)
 
-      case _: RequestConnection =>
+      case _: ConnectionRequested =>
         logger.warn(s"Cannot connect to already-connected peer at $address")
         Behaviors.same
 
