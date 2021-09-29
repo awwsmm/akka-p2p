@@ -3,7 +3,6 @@ package org.akkap2p
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.AskPattern.Askable
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 

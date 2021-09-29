@@ -10,7 +10,6 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.Timeout
 import com.typesafe.scalalogging.StrictLogging
-import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}

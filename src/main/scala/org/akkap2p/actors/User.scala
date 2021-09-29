@@ -66,7 +66,7 @@ object User extends StrictLogging {
    *
    * @return the [[Behavior]] of the [[User]]
    */
-  def behavior(implicit config: Main.Config): Behavior[Command] = {
+  def behavior(implicit config: Config): Behavior[Command] = {
 
     def withPeers(connected: Map[Address, ActorRef[Peer.Command]], disconnected: Map[Address, ActorRef[Peer.Command]]): Behavior[Command] = {
       Behaviors.receive { (context, command) =>

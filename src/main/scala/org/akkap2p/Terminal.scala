@@ -4,7 +4,6 @@ import akka.actor.typed.ActorSystem
 import com.typesafe.scalalogging.StrictLogging
 import io.github.awwsmm.zepto.Command
 import io.github.awwsmm.zepto.Command.{Quit, help}
-import org.akkap2p.Main.Config
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 

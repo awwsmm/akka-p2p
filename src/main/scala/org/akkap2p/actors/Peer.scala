@@ -70,7 +70,7 @@ object Peer extends StrictLogging {
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnected`
    */
-  def disconnected(address: Address)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
+  def disconnected(address: Address)(implicit user: ActorRef[User.Command], config: Config): Behavior[Command] =
     Behaviors.receive { (context, command) =>
 
       implicit val system: ActorSystem[Nothing] = context.system
@@ -162,7 +162,7 @@ object Peer extends StrictLogging {
    * @param address the [[Address]] (`host` and `port`) of this `Peer`
    * @return a `Peer` actor `Behavior`, either `disconnecting` or `disconnected`
    */
-  private[this] def disconnecting(address: Address, killSwitch: UniqueKillSwitch)(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
+  private[this] def disconnecting(address: Address, killSwitch: UniqueKillSwitch)(implicit user: ActorRef[User.Command], config: Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Disconnect =>
         logger.info(s"Disconnected from peer at $address")
@@ -194,7 +194,7 @@ object Peer extends StrictLogging {
    * @return a `Peer` actor `Behavior`, either `connected` or `disconnecting`
    */
   private[this] def connected(address: Address, onReceive: AddressedMessage => Unit, peer: ActorRef[TMS], killSwitch: UniqueKillSwitch
-                             )(implicit user: ActorRef[User.Command], config: Main.Config): Behavior[Command] =
+                             )(implicit user: ActorRef[User.Command], config: Config): Behavior[Command] =
     Behaviors.receiveMessage {
       case Incoming(message) =>
         logger.debug(s"""Received incoming message "$message" from $address""")
