@@ -33,8 +33,8 @@ import org.akkap2p.model.{Address, AddressedMessage}
  */
 object Peer extends StrictLogging {
 
-  private val ClosingConnection = "[[[goodbye"
-  private val ClosingConnectionAck = "adios]]]"
+  private[this] val ClosingConnection = "[[[goodbye"
+  private[this] val ClosingConnectionAck = "adios]]]"
 
   sealed trait Command
 
@@ -51,13 +51,13 @@ object Peer extends StrictLogging {
   final case class Outgoing(message: String) extends Command
 
   /** Represents a message from the external `Peer` to this `User`. */
-  private final case class Incoming(message: String) extends Command
+  private[this] final case class Incoming(message: String) extends Command
 
   /** Indicates that the external `Peer` has cleanly disconnected from this `User`. */
-  private case object StreamHasCompleted extends Command
+  private[this] case object StreamHasCompleted extends Command
 
   /** Indicates that the external `Peer` has uncleanly disconnected from this `User`. */
-  private final case class StreamHasFailed(throwable: Throwable) extends Command
+  private[this] final case class StreamHasFailed(throwable: Throwable) extends Command
 
   /**
    * The [[Behavior]] of a disconnected [[Peer]].
@@ -179,10 +179,11 @@ object Peer extends StrictLogging {
     }
 
   /**
-   * The [[Behavior]] of a connected peer.
+   * The [[Behavior]] of a connected [[Peer]].
    *
-   * We can receive and handle [[Incoming]] messages from a connected peer, and send [[Outgoing]] messages to a
-   * connected peer. We can also [[Disconnect]] from a connected peer by sending it the [[ClosingConnection]] message.
+   * The `User` can receive and handle [[Incoming]] messages from a connected `Peer`, and send [[Outgoing]] messages to
+   * a connected `Peer`. The `User` can also [[Disconnect]] from a connected `Peer` by sending it the
+   * [[ClosingConnection]] message.
    *
    * When we _receive_ a [[ClosingConnection]] message _from_ a peer, we reply with the [[ClosingConnectionAck]]
    * message, to let the peer know that we acknowledge the termination of the connection.
