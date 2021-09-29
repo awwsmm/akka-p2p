@@ -16,7 +16,7 @@ object Config extends StrictLogging {
     ConfigSource.default.load[Config] match {
       case Right(value) => value
       case Left(reasons) =>
-        val msg = s"Cannot start App. Invalid config: $reasons"
+        val msg = s"Cannot start akka-p2p. Invalid config: $reasons"
         logger.error(msg)
         throw new IllegalArgumentException(msg)
     }

@@ -23,7 +23,7 @@ object Terminal extends StrictLogging {
 
     final val logout =
       Command("logout", "disconnects from all peers", {
-        _ => Actions.disconnectAll()
+        _ => Actions.logout()
       })
 
     final val send =

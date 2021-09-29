@@ -1,8 +1,6 @@
 package org.akkap2p
 package actors
 
-import scala.concurrent.duration.Duration
-
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.http.scaladsl.model.HttpResponse
@@ -27,7 +25,7 @@ object User extends StrictLogging {
   final case class AcceptConnection(sender: ActorRef[HttpResponse], upgrade: WebSocketUpgrade, address: Address, onReceive: AddressedMessage => Unit) extends Command
 
   /** `Command` to attempt a connection to an external peer. */
-  final case class RequestConnection(address: Address, onReceive: AddressedMessage => Unit, timeout: Duration) extends Command
+  final case class RequestConnection(address: Address, onReceive: AddressedMessage => Unit) extends Command
 
   /** `Command` received when successfully connected to an external peer. */
   final case class RegisterConnected(address: Address, peer: ActorRef[Peer.Command]) extends Command
@@ -94,11 +92,11 @@ object User extends StrictLogging {
                 }
             }
 
-          case RequestConnection(address, onReceive, timeout) =>
+          case RequestConnection(address, onReceive) =>
             disconnected.get(address) match {
               case Some(peer) =>
                 logger.info(s"Attempting to connect to known peer at $address")
-                peer ! Peer.ConnectionRequested(timeout, onReceive)
+                peer ! Peer.ConnectionRequested(config.timeouts.requestConnection, onReceive)
                 Behaviors.same
 
               case None =>
@@ -109,7 +107,7 @@ object User extends StrictLogging {
                 } else {
                   logger.info(s"Attempting to connect to new peer at $address")
                   val peer = context.spawn(Peer.disconnected(address), address.urlEncoded)
-                  peer ! Peer.ConnectionRequested(timeout, onReceive)
+                  peer ! Peer.ConnectionRequested(config.timeouts.requestConnection, onReceive)
                   withPeers(connected, disconnected + (address -> peer))
                 }
             }

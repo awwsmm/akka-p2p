@@ -1,45 +1,47 @@
 package org.akkap2p
 
-import akka.actor.typed.ActorSystem
-import akka.actor.typed.scaladsl.AskPattern.Askable
+import akka.actor.typed.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import org.akkap2p.actors.User
 import org.akkap2p.model.{Address, AddressedMessage}
 
+/**
+ * Actions represent routines which can be called via the [[Terminal]] or via the [[API]].
+ */
 object Actions extends StrictLogging {
 
-  def connect(address: Address, onReceive: AddressedMessage => Unit)(implicit system: ActorSystem[User.Command], config: Config): Option[String] = {
+  def connect(address: Address, onReceive: AddressedMessage => Unit)(implicit user: ActorRef[User.Command]): Option[String] = {
     val msg = s"Attempting to request connect to peer at $address"
     logger.debug(msg)
-    system.ref ! User.RequestConnection(address, onReceive, config.timeouts.requestConnection)
+    user ! User.RequestConnection(address, onReceive)
     Some(msg)
   }
 
-  def disconnect(address: Address)(implicit system: ActorSystem[User.Command]): Option[String] = {
+  def disconnect(address: Address)(implicit user: ActorRef[User.Command]): Option[String] = {
     val msg = s"Attempting to disconnect from peer at $address"
     logger.debug(msg)
-    system.ref ! User.Disconnect(address)
+    user ! User.Disconnect(address)
     Some(msg)
   }
 
-  def disconnectAll()(implicit system: ActorSystem[User.Command]): Option[String] = {
-    val msg = "Attempting to disconnect from all peers"
+  def logout()(implicit user: ActorRef[User.Command]): Option[String] = {
+    val msg = "Attempting to disconnect from all peers (logout)"
     logger.info(msg)
-    system.ref ! User.Disconnect
+    user ! User.Disconnect
     Some(msg)
   }
 
-  def send(address: Address, message: String)(implicit system: ActorSystem[User.Command]): Option[String] = {
+  def send(address: Address, message: String)(implicit user: ActorRef[User.Command]): Option[String] = {
     val msg =s"""Attempting to send message "$message" to peer at $address"""
     logger.debug(msg)
-    system.ref ! User.Send(address, message)
+    user ! User.Send(address, message)
     Some(msg)
   }
 
-  def broadcast(message: String)(implicit system: ActorSystem[User.Command]): Option[String] = {
+  def broadcast(message: String)(implicit user: ActorRef[User.Command]): Option[String] = {
     val msg =s"""Attempting to broadcast message "$message" to all peers"""
     logger.debug(msg)
-    system.ref ! User.Broadcast(message)
+    user ! User.Broadcast(message)
     Some(msg)
   }
 

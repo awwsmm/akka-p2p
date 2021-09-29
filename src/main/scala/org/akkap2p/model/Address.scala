@@ -8,7 +8,7 @@ import java.net.URLEncoder
 import com.typesafe.scalalogging.StrictLogging
 
 /**
- * The address of a `Peer`, with a `host` and a `port`.
+ * The address of a peer, with a `host` and a `port`.
  *
  * @param host the hostname or IP address of the peer
  * @param port the port on which '''akka-p2p''' is running on the peer

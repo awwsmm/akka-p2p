@@ -56,7 +56,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
       }
     }
 
-    /** Route for disconnecting from a peer. */
+    /** Route for disconnecting from one or more peers. */
     val disconnect: Route = path("disconnect") {
       put {
         entity(as[Address]) { address =>
@@ -65,7 +65,7 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
         }
       } ~
       put {
-        Actions.disconnectAll()
+        Actions.logout()
         complete(StatusCodes.OK)
       }
     }
@@ -90,17 +90,22 @@ object API extends Directives with StrictLogging with DefaultJsonProtocol with S
       }
     }
 
-    /*
-    Example body:
-        {
-          "address": {
-            "host": "localhost",
-            "port": 3002
-          },
-          "message": "hey"
-        }
+    /**
+     * Route to send a message to one or more peers.
+     *
+     * The default behavior is to broadcast the POST body to all connected peers.
+     *
+     * To send a message to a single peer, the body should be formatted like
+     * {{{
+     * {
+     *   "address": {
+     *     "host": "localhost",
+     *     "port": 3002
+     *   },
+     *   "message": "hello, friend!"
+     * }
+     * }}}
      */
-    /** Route to send a message to one or more peers. */
     val send: Route = path("send") {
 
       implicit val addressedMessageFormat: RootJsonFormat[AddressedMessage] = jsonFormat2(AddressedMessage)
